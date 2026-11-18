@@ -1,37 +1,45 @@
-# LunarCapes — See Lunar Client Capes on Fabric 26.3
+# LunarCapes
 
-**For Minecraft Java 26.3 only.** Client-side Fabric mod that lets you see [Lunar Client](https://lunarclient.dev/) cloaks/cosmetics while playing on normal Fabric — no Lunar Client required.
+Fabric mod for Minecraft 26.3 that shows Lunar Client cloaks on regular Fabric.
+No Lunar install needed.
 
-> Uses public mirrors of Lunar's Apollo system. Lunar delivers cloaks over an authenticated Apollo websocket (`wss://assetserver.lunarclientprod.com`) and CDN (`textures.lunarclientcdn.com`). This mod fetches the same PNGs through community mirrors that proxy Apollo data, so you see the *original* Lunar capes (Dragon, Galaxy, etc.), not a custom moon icon.
+I made this because most of my friends use Lunar and I was on Fabric. I wanted to see their actual cloaks without switching launchers, so this mod fetches the same textures Lunar uses.
 
-## Why 26.3 only?
+## What it does
 
-- Built against Mojang official mappings for **26.3** (Mojang version scheme `year.drop` — 26.3 is Java Edition's third 2026 drop).
-- `fabric.mod.json` declares `"minecraft": "26.3"` strictly, Fabric Loader will refuse to load on any other version.
-- Toolchain: **Fabric Loom 1.19-SNAPSHOT, Fabric Loader 0.20.1, Fabric API 0.166.2+26.3, Java 25**.
+When someone joins with a Lunar cloak, the mod downloads the image and replaces their cape texture. It works with the original Lunar cloaks, not a custom replacement. If they do not have one, nothing changes.
 
-If you need 1.21.x, change `minecraft_version` in `gradle.properties` and `fabric.mod.json` accordingly.
+Vanilla capes still work. There is a config option to keep vanilla capes when present if you prefer that.
+
+## Requires
+
+- Minecraft Java 26.3 only
+- Fabric Loader 0.20.1 or newer
+- Fabric API 0.166.2+26.3
+- Java 25
+
+This will not load on other versions. The mod is pinned to `minecraft: 26.3` in `fabric.mod.json` and built with Loom 1.19 on official Mojang mappings for 26.3. If you need a backport you have to change `minecraft_version` and rebuild.
 
 ## How it works
 
-1. **Mixin on `PlayerInfo`**:
-   - `@Inject(createSkinLookup)` triggers an async fetch when a player's skin is first resolved.
-   - `@Inject(getSkin)` replaces the `PlayerSkin` cape texture with the fetched Lunar texture if present. Respects vanilla capes if `showOnlyWhenNoVanillaCape=true`.
+The cape handling in 26.3 is through `PlayerInfo` and `PlayerSkin`. The mod injects at two points:
 
-2. **`LunarCapeService`**:
-   - Tries `primaryApiUrl` first, then `fallbackApiUrls` in order.
-   - Endpoints may return raw `image/png` or JSON (`{url, capeUrl, texture, ...}`) — both handled. Nested fields (`cloak.texture`, `data.url`, Mojang `textures.CAPE.url`) supported.
-   - Downloads PNG → `NativeImage` → scales to power-of-two (64×32 minimum) → registers as `DynamicTexture` with `Identifier("lunarcapes:<uuid_nodash>")`.
-   - Reuses cape as elytra when `enableElytraTexture=true` and image is elytra-compatible (64×64).
+- on `createSkinLookup` it starts an async fetch for that UUID
+- on `getSkin` it swaps in the downloaded texture if one was found
 
-3. **Transparency fix**:
-   - `CapeLayerMixin` wraps `RenderTypes.entitySolid` → `RenderTypes.armorCutoutNoCull` so alpha renders correctly.
+The download part tries the URLs from the config in order. Some endpoints return a PNG directly, others return JSON with a URL inside. The mod handles both and checks a few common JSON shapes like `url`, `capeUrl`, `cloak.texture` and the Mojang profile format.
 
-Reference implementation adapted from [Cael's Capes](https://github.com/CaelTheColher/Capes) (26.3 branch) + Apollo docs at https://lunarclient.dev/apollo/introduction and https://lunarclient.dev/apollo/developers/private-modules/cosmetic .
+Once downloaded the image is read with `NativeImage`, padded to a power of two if needed (at least 64x32), and registered as a `DynamicTexture` under `lunarcapes:<uuid>`. If the cape is 64x64 and `enableElytraTexture` is on, it is also used for the elytra.
 
-## Default API endpoints
+Capes can have transparency issues in vanilla. The cape layer mixin switches `entitySolid` to `armorCutoutNoCull` so alpha renders right.
 
-You can change these in `config/lunarcapes.json` without recompiling:
+The pattern is similar to Cael's Capes, adapted for the new mappings in 26.3. Apollo docs are at https://lunarclient.dev/apollo/introduction.
+
+## Config
+
+A file is created at `config/lunarcapes.json` on first start. Edit it and run `/lunarcapes reload` in game. No restart needed.
+
+Default endpoints:
 
 ```json
 {
@@ -45,32 +53,14 @@ You can change these in `config/lunarcapes.json` without recompiling:
 }
 ```
 
-Placeholders: `{uuid}` (dashed), `{uuid_nodash}`, `{name}`.
+Placeholders you can use are `{uuid}`, `{uuid_nodash}` and `{name}`.
 
-> **Note:** `api.lunarclientprod.com` and `textures.lunarclientcdn.com` are Lunar's official hosts but normally require Apollo auth. Public mirrors like `lunar.zeratos.com` cache the same data unauthenticated. If Lunar changes their CDN, just update the template in the config.
+Lunar's official hosts usually need auth from the Apollo websocket, so they often return 403 unless proxied. Community mirrors like lunar.zeratos.com cache the same data without auth. If Lunar changes the CDN, just update the URL in the config.
 
-## Installation (26.3)
-
-1. Install **Fabric Loader 0.20.1** for Minecraft **26.3** (use Fabric installer or Prism Launcher).
-2. Put `fabric-api-0.166.2+26.3.jar` + `lunarcapes-1.0.0.jar` in `mods/`.
-3. Launch with **Java 25** (26.3 requires Java 25).
-4. Join any server; Lunar capes of other players appear automatically if they own one on Lunar.
-
-## Commands
-
-- `/lunarcapes` — shows current config
-- `/lunarcapes reload` — reloads `config/lunarcapes.json`
-- `/lunarcapes clearcache` — clears cached cape textures
-- Alias: `/lcapes`
-
-## Configuration (`config/lunarcapes.json`)
-
-Created on first run:
+Other options in the file:
 
 ```json
 {
-  "primaryApiUrl": "https://api.lunarclientprod.com/cloak/{uuid}",
-  "fallbackApiUrls": [ ... ],
   "enabled": true,
   "enableElytraTexture": true,
   "enableAnimatedCapes": false,
@@ -81,32 +71,44 @@ Created on first run:
 }
 ```
 
-Toggle `verboseLogging` to debug which URL succeeded.
+Set `verboseLogging` to true if you want to see which URL worked in the log.
 
-## Building
+## Install
 
-Requires **Java 25** and Gradle 9.8+:
+1. Install Fabric for 26.3 (Fabric installer or Prism)
+2. Put `fabric-api-0.166.2+26.3.jar` and the built `lunarcapes-1.0.0.jar` into `mods/`
+3. Launch with Java 25 and join a server. If someone with a Lunar cloak is online you should see it right away.
 
-```bash
+## Commands
+
+`/lunarcapes` shows the current config
+`/lunarcapes reload` reloads the json file
+`/lunarcapes clearcache` clears the downloaded capes
+
+There is also `/lcapes` as a short alias.
+
+## Build
+
+You need Java 25.
+
+```
 ./gradlew build
-# jar → build/libs/lunarcapes-1.0.0.jar
 ```
 
-Project is a direct port of `FabricMC/fabric-example-mod#26.3`:
+The jar ends up in `build/libs/`. The project was started from the Fabric example mod for 26.3.
 
-- `minecraft_version=26.3`, `loader_version=0.20.1`, `loom_version=1.19-SNAPSHOT`
-- `loom { splitEnvironmentSourceSets() }` etc.
+## Common issues
 
-## Troubleshooting
+No capes showing: The first URL in the config is the official Lunar endpoint and it usually needs auth. Try moving a working mirror to the top and reload with `/lunarcapes reload`.
 
-- **No capes visible**: Lunar's official API is auth-walled; try switching `primaryApiUrl` to a working mirror in the config and `/lunarcapes reload`.
-- **Crash on startup**: Wrong Minecraft version — this build loads *only* on 26.3. Check `mods/fabric.mod.json` dependency.
-- **Elytra shows cape texture**: Disable `enableElytraTexture` if you prefer vanilla elytra.
+Crash on startup: Check you are actually on 26.3. This build does not run on 1.21 or other 26.x snapshots.
+
+Elytra looks like a cape: This is on purpose when the cape is 64x64. Turn off `enableElytraTexture` if you do not want it.
 
 ## Credits
 
-- Lunar Client / Moonsworth — original cloak system & Apollo API (https://lunarclient.dev, https://github.com/LunarClient/Apollo)
-- CaelTheColher/Capes — cape injection pattern for Fabric 26.x
-- FabricMC — example mod template for 26.3
+Lunar Client and Moonsworth for the original cloak system. Docs at https://lunarclient.dev and https://github.com/LunarClient/Apollo.
+Cael's Capes for the Fabric injection approach.
+FabricMC for the example mod and Loom.
 
-License: MIT
+MIT License - see LICENSE.
