@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "me.lunarcapes.mixin.client",
+  "compatibilityLevel": "JAVA_25",
+  "refmap": "lunarcapes.refmap.json",
+  "mixins": [],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
