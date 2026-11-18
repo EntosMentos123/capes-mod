@@ -1,0 +1,11 @@
+/.gradle
+/build
+/out
+/run
+/logs
+.fabric
+/remappedSrc
+*.log
+.idea
+*.iml
+.DS_Store
